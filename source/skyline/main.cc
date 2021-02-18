@@ -53,13 +53,21 @@ DEFINE_int32(reorder, kReorder, "reorder P by sorting with q");
 const bool kOnlyFast = false;
 DEFINE_bool(onlyfast, kOnlyFast, "Calc only the fast solution");
 
-const bool kUseTinFilter = true;
-DEFINE_bool(usetinfilter,
-            kUseTinFilter,
-            "Use TIN filter to make calc time faster");
+
 
 const bool kFastLSI = true;
 DEFINE_bool(fastlsi, kFastLSI, "Use fast LSI");
+
+DEFINE_bool(useTSILSI, false, "1.");
+DEFINE_bool(useSibori, false, "2.");
+DEFINE_bool(useBB, false, "3");
+DEFINE_bool(useIneq, false, "4.");
+DEFINE_bool(useNewLB, false, "5.");
+const bool kUseTinFilter = false;
+DEFINE_bool(usetinfilter,
+            kUseTinFilter,
+            "6. Use TIN filter to make calc time faster");
+DEFINE_bool(useALL, false, "7. Use all");
 
 int main(int argc, char* argv[]) {
   {  // LOG
@@ -132,14 +140,20 @@ int main(int argc, char* argv[]) {
     meshgraph.clear_cache();
   }
 
-  if (FLAGS_usetinfilter) {
+  if (FLAGS_usetinfilter || FLAGS_useALL) {
     meshgraph.use_tin_filter();
+    LOG(INFO) << "use tin filter";
   }
 
   std::chrono::milliseconds time2;
   const std::vector<int> skyline_points2 = MEASURE_MILLISECONDS(
-      time2, skyline::fast::solve_skyline_on_tin(meshgraph, ps, qs,
-                                                 FLAGS_reorder, FLAGS_fastlsi));
+      time2,
+      skyline::fast::solve_skyline_on_tin(
+          meshgraph, ps, qs, FLAGS_reorder, FLAGS_fastlsi,
+          FLAGS_useTSILSI || FLAGS_useALL, FLAGS_useSibori || FLAGS_useALL,
+          FLAGS_useBB || FLAGS_useALL, FLAGS_useIneq || FLAGS_useALL,
+          FLAGS_useNewLB || FLAGS_useALL, FLAGS_useALL));
+
   meshgraph.clear_cache();
   if (!FLAGS_onlyfast) {
     LOG(INFO) << "performance := x " << (double)time1.count() / time2.count()

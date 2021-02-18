@@ -28,9 +28,12 @@ class Box {
  public:
   Box() : is_initialized_(false) {}
   Box(const POINT3D& mn, const POINT3D& mx)
-      : is_initialized_(true), mn_(mn), mx_(mx) {}
+      : is_initialized_(true), disable_(false), mn_(mn), mx_(mx) {}
 
   bool is_point_in_minimum_bounding_box(MeshGraph& meshgraph, const int pid) {
+    if(disable_){
+      return true;
+    }
     if (!is_valid_data()) {
       // not initialized yet.
       return true;
@@ -42,12 +45,15 @@ class Box {
     ok &= mn_.z() <= p.z() && p.z() <= mx_.z();
     return ok;
   }
-
+  void disable() { disable_ = true; }
   bool is_valid_data() { return is_initialized_; }
 
   void update_minimum_bounding_box(MeshGraph& meshgraph,
                                    const int new_p,
                                    const std::vector<int>& qs) {
+    if (disable_) {
+      return;
+    }
     Box mbr_of_new_p =
         create_minimum_bounding_box_from_p_and_qs(meshgraph, new_p, qs);
     update_intersect_box(mbr_of_new_p);
@@ -114,6 +120,7 @@ class Box {
   }
 
   bool is_initialized_;
+  bool disable_;
   POINT3D mn_, mx_;
 };
 

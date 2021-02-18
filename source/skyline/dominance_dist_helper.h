@@ -24,19 +24,24 @@ class DominanceDistHelper {
         surface_distance_memo_(ps.size(),
                                std::vector<std::optional<double>>(qs.size())),
         dominance_memo_(ps.size(), std::vector<int>(ps.size(), 0)),
-        fast_the_number_of_calculating_ds_(0) {
+        fast_the_number_of_calculating_ds_(0),
+        disable_newLB_(false),disalbe_ineq_(false) {
     init_dominance_memo(ps, qs);
   }
-
+  void disable_newLB() { disable_newLB_ = true; }
+  void disable_ineq() { disalbe_ineq_ = true; }
   // true : |pnew| is dominated by one of |current_skylines|
   bool is_dominated_with_inequality(int pnew,
                                     const std::set<int>& current_skylines,
                                     const std::vector<int>& qs) {
-    for (auto skyline : current_skylines) {
-      if (is_dominated_with_inequality(pnew, skyline, qs)) {
-        return true;
-      }
+    if (disalbe_ineq_){
+      return false;
     }
+      for (auto skyline : current_skylines) {
+        if (is_dominated_with_inequality(pnew, skyline, qs)) {
+          return true;
+        }
+      }
     return false;
   }
 
@@ -44,6 +49,9 @@ class DominanceDistHelper {
   bool is_not_dominated_with_inequality(int pnew,
                                         const std::set<int>& current_skylines,
                                         const std::vector<int>& qs) {
+    if (disalbe_ineq_) {
+      return false;
+    }
     // all : if not Ds(pnew) > Ds(skyline), pnew is not dominated.
     for (auto skyline : current_skylines) {
       if (!is_not_dominated_with_inequality(pnew, skyline, qs)) {
@@ -139,11 +147,11 @@ class DominanceDistHelper {
   bool is_not_dominated_with_surface_distance(const int p1,
                                               const int p2,
                                               const std::vector<int>& qs) {
-    if (check_no_dominance(p1, p2)) {
+    if (check_no_dominance(p1, p2) && !disalbe_ineq_) {
       return true;
     }
     for (auto q : qs) {
-      if (DE(p1, q) > DN(p2, q)) {  // DS(p1) > DS(p2)
+      if (DE(p1, q) > DN(p2, q) && !disalbe_ineq_) {  // DS(p1) > DS(p2)
         continue;
       }
       if (DS(p1, q) <= DS(p2, q)) {
@@ -155,14 +163,15 @@ class DominanceDistHelper {
   }
 
   double DE(int p, int q) {
-    if (false) {  // gm..
+    if (!disable_newLB_) {  // gm..
       double theta_min = meshgraph_.calc_theta_min();
-      LOG(INFO) << "theta min := " << theta_min;
+      // LOG(INFO) << "theta min := " << theta_min;
       double lambda = std::min(
           {std::sin(theta_min) / 2, std::sin(theta_min), std::cos(theta_min)});
       double lower = network_distance(p, q) * lambda;
-      LOG(INFO) << "lower check ! De := " << euclid_distance(p, q)
-                << "lambda*Dn := " << lower;
+      // LOG(INFO) << "lower check ! De := " << euclid_distance(p, q)
+      //           << "lambda*Dn := " << lower;
+      return std::max(lower, euclid_distance(p,q));
     }
 
     return euclid_distance(p, q);
@@ -208,6 +217,8 @@ class DominanceDistHelper {
   std::vector<std::vector<std::optional<double>>> surface_distance_memo_;
   std::vector<std::vector<int>> dominance_memo_;
   int fast_the_number_of_calculating_ds_;
+  bool disable_newLB_;
+  bool disalbe_ineq_;
 };
 
 }  // namespace fast

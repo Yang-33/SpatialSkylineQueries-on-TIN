@@ -170,36 +170,46 @@ std::vector<int> solve_skyline_on_tin(MeshGraph& meshgraph,
                                       const std::vector<int>& ps,
                                       const std::vector<int>& qs,
                                       const int reorder_flag,
-                                      const bool fast_lsi_flag) {
+                                      const bool fast_lsi_flag,
+                                      const bool useTSILSI,
+                                      const bool useSibori,
+                                      const bool useBB,
+                                      const bool useIneq,
+                                      const bool useNewLB,
+                                      const bool useAll) {
   std::set<int> skyline;
-
-  // q in TSI ?
-  surfaceindex::SurfaceIndexConstructor surface_index(meshgraph, ps, qs);
-  std::vector<int> tsi_points = surface_index.points_in_tsi();
-  skyline = std::set<int>{tsi_points.begin(), tsi_points.end()};
-  LOG(INFO) << " TSI result size := " << skyline.size();
-
   DominanceDistHelper dominance_checker(meshgraph, ps, qs);
 
   // q in LSI ?
   //   check out inequality before calc Ds corresponding all candidates
   //   calc Ds to find argmin
-  auto lsi_candidates = surface_index.points_in_lsi();
-  for (auto [lsi_candidate, q] : lsi_candidates) {
-    if (fast_lsi_flag) {
-      int nn_id = dominance_checker.nearest_search(q, lsi_candidate);
-      skyline.insert(nn_id);
-    } else {
-      LOG(INFO) << "LSI INFO size:=" << lsi_candidate.size() << ", q := " << q;
-      int id = lsi_candidate.front();
-      double ds = dominance_checker.surface_distance(id, q);
-      for (auto p : lsi_candidate) {
-        if (ds > dominance_checker.surface_distance(p, q)) {
-          id = p;
-          ds = dominance_checker.surface_distance(p, q);
+  if (useTSILSI) {
+    // q in TSI ?
+    surfaceindex::SurfaceIndexConstructor surface_index(meshgraph, ps, qs);
+    std::vector<int> tsi_points = surface_index.points_in_tsi();
+    skyline = std::set<int>{tsi_points.begin(), tsi_points.end()};
+    LOG(INFO) << " TSI result size := " << skyline.size();
+
+
+    auto lsi_candidates = surface_index.points_in_lsi();
+    for (auto [lsi_candidate, q] : lsi_candidates) {
+      if (fast_lsi_flag) {
+        int nn_id = dominance_checker.nearest_search(q, lsi_candidate);
+        skyline.insert(nn_id);
+        LOG(INFO) << "LSI : add " << nn_id;
+      } else {
+        LOG(INFO) << "LSI INFO size:=" << lsi_candidate.size()
+                  << ", q := " << q;
+        int id = lsi_candidate.front();
+        double ds = dominance_checker.surface_distance(id, q);
+        for (auto p : lsi_candidate) {
+          if (ds > dominance_checker.surface_distance(p, q)) {
+            id = p;
+            ds = dominance_checker.surface_distance(p, q);
+          }
         }
+        skyline.insert(id);
       }
-      skyline.insert(id);
     }
   }
 
@@ -212,16 +222,44 @@ std::vector<int> solve_skyline_on_tin(MeshGraph& meshgraph,
                                   qs);
 
   const std::vector<int> reordered_ps =
-      (reorder_flag ? reorder_ps(dominance_checker, ps, qs, reorder_flag) : ps);
-  for (auto p : reordered_ps) {
+      (reorder_flag && useAll
+           ? reorder_ps(dominance_checker, ps, qs, reorder_flag)
+           : ps);
+
+  std::vector<int> shibotta_ps = reordered_ps;
+  if (useSibori) {
+    // TODO: Use Rtree..
+    shibotta_ps.clear();
+    for (auto p : reordered_ps) {
+      if (mbr.is_point_in_minimum_bounding_box(meshgraph, p)) {
+        shibotta_ps.push_back(p);
+      }else{
+        // LOG(INFO) << "use mbr pruning";
+      }
+    }
+  }
+
+  if (!useBB) {
+    mbr.disable();
+  }
+  if (!useIneq) {
+    dominance_checker.disable_ineq();
+  }
+  if (!useNewLB) {
+    dominance_checker.disable_newLB();
+  }
+
+  for (auto p : shibotta_ps) {
     if (skyline.count(p)) {
       continue;
     }
     if (!mbr.is_point_in_minimum_bounding_box(meshgraph, p)) {
+      // LOG(INFO) << "use mbr pruning in loop";
       continue;
     }
 
     if (dominance_checker.is_dominated_with_inequality(p, skyline, qs)) {
+      // LOG(INFO) << "use ineq";
       continue;
     }
 
